@@ -1,6 +1,7 @@
 const amqp = require("amqplib");
 const fs = require("fs");
 const crypto = require("crypto");
+// модуль для работы с криптографическими функциями
 const csv = require("csv-parser");
 
 const N = 3;
@@ -8,6 +9,12 @@ const N = 3;
 function getStorageNode(date) {
     return parseInt(crypto.createHash("md5").update(date).digest("hex"), 16) % N;
 }
+// MD5 — это алгоритм хэширования, который преобразует данные в 128-битный хэш
+// Создается MD5-хеш от даты, который затем преобразуется 
+// в целое число с основанием 16. После этого результат 
+// делится на N с остатком, что позволяет определить номер 
+// узла хранения (от 0 до N-1)
+
 
 function parseTestsetDate(datetime_utc) {
     if (!datetime_utc || !datetime_utc.includes("-")) {

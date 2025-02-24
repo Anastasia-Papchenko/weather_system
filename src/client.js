@@ -28,34 +28,37 @@ async function startClient() {
         }
     }
 
-    function parseTestsetDate(datetime_utc) {
-        if (!datetime_utc || !datetime_utc.includes("-")) {
-            return null;
-        }
+    // function parseTestsetDate(datetime_utc) {
+    //     if (!datetime_utc || !datetime_utc.includes("-")) {
+    //         return null;
+    //     }
     
-        const [datePart, utc] = datetime_utc.split("-");
-        if (!/^\d{8}$/.test(datePart)) {
-            return null;
-        }
+    //     const [datePart, utc] = datetime_utc.split("-");
+    //     if (!/^\d{8}$/.test(datePart)) {
+    //         return null;
+    //     }
     
-        const year = datePart.substring(0, 4);
-        const month = datePart.substring(4, 6);
-        const day = datePart.substring(6, 8);
+    //     const year = datePart.substring(0, 4);
+    //     const month = datePart.substring(4, 6);
+    //     const day = datePart.substring(6, 8);
     
-        return {
-            date: `${day}-${month}-${year}`, 
-            utc
-        };
-    }
+    //     return {
+    //         date: `${day}-${month}-${year}`, 
+    //         utc
+    //     };
+    // }
 
     channel.consume('client', (msg) => {
         const data = JSON.parse(msg.content.toString());
         if (data.error) {
             console.log(`Ошибка: ${data.error}`);
         } else {
-            console.log(`Данные за ${data.date}:`, data.data);
+            console.log(`Данные:`, data.data);
         }
     }, { noAck: true });
+
+
+
 
     const rl = readline.createInterface({
         input: process.stdin,
@@ -88,7 +91,10 @@ async function startClient() {
 
             console.log(`Файл ${filePath} отправлен на загрузку`);
         } else if (args[0] === "GET") {
-            await channel.sendToQueue('manager', Buffer.from(JSON.stringify({ command: "GET", date: args[1] })));
+            await channel.sendToQueue('manager', Buffer.from(JSON.stringify({ 
+                command: "GET", 
+                date: args[1] 
+            })));
             console.log(`Запрос отправлен: ${args[1]}`);
         } else {
             console.log("Ошибка: Неизвестная команда. Используйте LOAD [файл] или GET [дата]");

@@ -1,4 +1,5 @@
 const { spawn } = require('child_process');
+// функция для запуска нового процесса 
 
 const processes = [];
 

@@ -1,6 +1,7 @@
 const amqp = require('amqplib');
 
 const STORAGE_ID = process.argv[2] || 0;
+// node storage.js [0,1,2]
 let storageData = {};
 
 function formatDate(dateString) {
@@ -42,11 +43,16 @@ async function startStorage() {
 
         if (storageData[query.date] && storageData[query.date].length > 0) {
             const formattedDate = formatDate(query.date);
-            const response = JSON.stringify({ date: formattedDate, data: storageData[query.date] });
+            const response = JSON.stringify({ 
+                date: formattedDate, 
+                data: storageData[query.date] 
+            });
             await channel.sendToQueue(responseQueue, Buffer.from(response));
         } else {
             const formattedDate = formatDate(query.date);
-            const response = JSON.stringify({ error: `Данные за ${formattedDate} не найдены` });
+            const response = JSON.stringify({ 
+                error: `Данные за ${formattedDate} не найдены` 
+            });
             await channel.sendToQueue(responseQueue, Buffer.from(response));
             console.log(`[Хранитель ${STORAGE_ID}] Данные не найдены: ${formattedDate}`);
         }
