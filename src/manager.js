@@ -4,10 +4,12 @@ const crypto = require("crypto");
 // модуль для работы с криптографическими функциями
 const csv = require("csv-parser");
 
-const N = 3;
+const N = process.argv[2] ? parseInt(process.argv[2], 10) : 3;
 
-function getStorageNode(date) {
-    return parseInt(crypto.createHash("md5").update(date).digest("hex"), 16) % N;
+function getStorageNode(date, N) {
+    const hash = crypto.createHash("md5").update(date).digest();
+    const hashInt = hash.readUInt32BE(0); 
+    return hashInt % N;
 }
 // MD5 — это алгоритм хэширования, который преобразует данные в 128-битный хэш
 // Создается MD5-хеш от даты, который затем преобразуется 
@@ -155,13 +157,13 @@ async function startManager() {
                     const processedData = extractData(row, fileFormat);
                     if (!processedData) return;
 
-                    const storageId = getStorageNode(processedData.date);
+                    const storageId = getStorageNode(processedData.date, N);
                     await channel.sendToQueue(`storage_${storageId}`, Buffer.from(JSON.stringify(processedData)));
                     console.log(`Отправлено в storage_${storageId}: ${processedData.date}`);
                 });
         } else if (data.command === "GET") {
             const date = data.date;
-            const storageId = getStorageNode(date);
+            const storageId = getStorageNode(date, N);
             console.log(`Запрос GET ${date} -> storage_${storageId}`);
             await channel.sendToQueue(`storage_${storageId}_query`, Buffer.from(JSON.stringify({ date })));
         }

@@ -1,6 +1,8 @@
 const { spawn } = require('child_process');
 // функция для запуска нового процесса 
 
+const N = process.argv[2] ? parseInt(process.argv[2], 10) : 3;
+
 const processes = [];
 
 function startProcess(name, command, args = []) {
@@ -14,15 +16,16 @@ function startProcess(name, command, args = []) {
     });
 }
 
-startProcess('Менеджер', 'node', ['src/manager.js']);
+startProcess('Менеджер', 'node', ['src/manager.js', N]);
 
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < N; i++) {
     startProcess(`Хранитель ${i}`, 'node', ['src/storage.js', i]);
 }
 
 setTimeout(() => {
     startProcess('Клиент', 'node', ['src/client.js']);
-}, 2000); 
+}, 2000);
+
 
 process.on('SIGINT', () => {
     console.log("\n Завершаем все процессы...");
