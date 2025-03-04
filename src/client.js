@@ -89,7 +89,7 @@ async function startClient() {
                 format: fileFormat
             })));
 
-            console.log(`Файл ${filePath} отправлен на загрузку`);
+            // console.log(`Файл ${filePath} отправлен на загрузку`);
         } else if (args[0] === "GET") {
             await channel.sendToQueue('manager', Buffer.from(JSON.stringify({ 
                 command: "GET", 

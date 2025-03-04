@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const csv = require("csv-parser");
 
 const N = process.argv[2] ? parseInt(process.argv[2], 10) : 3;
+const loadedFiles = new Set();
 
 function getStorageNode(date, N) {
     const hash = crypto.createHash("md5").update(date).digest();
@@ -149,7 +150,14 @@ async function startManager() {
         if (data.command === "LOAD") {
             const fileName = data.file;
             const fileFormat = data.format;
+
+            if (loadedFiles.has(fileName)) {
+                console.log(`Файл ${fileName} уже записан`);
+                return;
+            }
+
             console.log(`Загружаем файл: ${fileName} (Формат: ${fileFormat})`);
+            loadedFiles.add(fileName);
 
             fs.createReadStream(fileName)
                 .pipe(csv())
@@ -157,11 +165,20 @@ async function startManager() {
                     const processedData = extractData(row, fileFormat);
                     if (!processedData) return;
 
+                    // const storageId = getStorageNode(processedData.date, N);
+                    // await channel.sendToQueue(`storage_${storageId}`, Buffer.from(JSON.stringify(processedData)));
+                    // console.log(`Отправлено в storage_${storageId}: ${processedData.date}`);
                     const storageId = getStorageNode(processedData.date, N);
+                    const replicaId = (storageId + 1) % N;
+
                     await channel.sendToQueue(`storage_${storageId}`, Buffer.from(JSON.stringify(processedData)));
+                    await channel.sendToQueue(`storage_${replicaId}`, Buffer.from(JSON.stringify(processedData)));
+
+                    // console.log(`Отправлено в storage_${storageId} (реплика в storage_${replicaId}): ${processedData.date}`);
                     console.log(`Отправлено в storage_${storageId}: ${processedData.date}`);
                 });
-        } else if (data.command === "GET") {
+        } 
+        else if (data.command === "GET") {
             const date = data.date;
             const storageId = getStorageNode(date, N);
             console.log(`Запрос GET ${date} -> storage_${storageId}`);
