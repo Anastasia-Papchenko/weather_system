@@ -1,12 +1,21 @@
 const amqp = require('amqplib');
 
 const STORAGE_ID = process.argv[2] || 0;
-// node storage.js [0,1,2]
 let storageData = {};
+
 
 function formatDate(dateString) {
     if (typeof dateString !== "string") {
         dateString = String(dateString);
+    }
+
+    if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
+        return dateString;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        const [year, month, day] = dateString.split("-");
+        return `${day}-${month}-${year}`;
     }
 
     if (/^\d{8}$/.test(dateString)) {
@@ -16,8 +25,7 @@ function formatDate(dateString) {
         return `${day}-${month}-${year}`;
     }
 
-    const [year, month, day] = dateString.split("-");
-    return `${day}-${month}-${year}`;
+    return dateString;
 }
 
 async function startStorage() {
@@ -26,36 +34,104 @@ async function startStorage() {
 
     await channel.assertQueue(`storage_${STORAGE_ID}`, { durable: false });
     await channel.assertQueue(`storage_${STORAGE_ID}_query`, { durable: false });
+    await channel.assertQueue(`storage_${STORAGE_ID}_response`, { durable: false });
 
     console.log(`Хранитель ${STORAGE_ID} запущен...`);
 
     channel.consume(`storage_${STORAGE_ID}`, (msg) => {
         const data = JSON.parse(msg.content.toString());
-        if (!storageData[data.date]) {
-            storageData[data.date] = [];
+        if (!data.date) return;
+
+        const formattedDate = formatDate(data.date);
+
+        if (!storageData[formattedDate]) {
+            storageData[formattedDate] = [];
         }
-        storageData[data.date].push(data);
+
+        const alreadyExists = storageData[formattedDate].some(r =>
+            JSON.stringify(r) === JSON.stringify(data)
+        );
+        if (!alreadyExists) {
+            storageData[formattedDate].push(data);
+            // console.log(`[storage_${STORAGE_ID}] Получены данные за ${formattedDate}`);
+        }
     }, { noAck: true });
 
     channel.consume(`storage_${STORAGE_ID}_query`, async (msg) => {
         const query = JSON.parse(msg.content.toString());
-        const responseQueue = 'client';
+        const responseQueue = "manager_response";
 
-        if (storageData[query.date] && storageData[query.date].length > 0) {
-            const formattedDate = formatDate(query.date);
-            const response = JSON.stringify({ 
-                date: formattedDate, 
-                data: storageData[query.date] 
+        if (query.getAllData && query.correlationId) {
+            const replyQueue = msg.properties.replyTo || `storage_${STORAGE_ID}_response`;
+            // console.log(`[DEBUG] Ответ на getAllData:`, Object.keys(storageData));
+
+            await channel.sendToQueue(replyQueue, Buffer.from(JSON.stringify({
+                correlationId: query.correlationId,
+                storageId: STORAGE_ID,
+                allData: { storageData }
+            })), {
+                correlationId: query.correlationId
             });
-            await channel.sendToQueue(responseQueue, Buffer.from(response));
-        } else {
-            const formattedDate = formatDate(query.date);
-            const response = JSON.stringify({ 
-                error: `Данные за ${formattedDate} не найдены` 
-            });
-            await channel.sendToQueue(responseQueue, Buffer.from(response));
-            console.log(`[Хранитель ${STORAGE_ID}] Данные не найдены: ${formattedDate}`);
+
+            return;
         }
+
+        if (query.healthCheck && query.correlationId) {
+            await channel.sendToQueue(`storage_${STORAGE_ID}_response`,
+                Buffer.from(JSON.stringify({ status: "alive", correlationId: query.correlationId }))
+            );
+            return;
+        }
+
+        if (query.recoverData && query.target !== undefined) {
+            console.log(`Отправка данных из storage_${STORAGE_ID} в storage_${query.target}`);
+            const targetQueue = `storage_${query.target}`;
+            let dataTransferred = false;
+
+            try {
+                for (const date in storageData) {
+                    for (const record of storageData[date]) {
+                        await channel.sendToQueue(targetQueue, Buffer.from(JSON.stringify(record)));
+                        dataTransferred = true;
+                    }
+                }
+
+                if (dataTransferred) {
+                    console.log(`Данные из storage_${STORAGE_ID} успешно отправлены в storage_${query.target}`);
+                } else {
+                    console.log(`Нет данных для передачи из storage_${STORAGE_ID}`);
+                }
+
+                await channel.sendToQueue(`storage_${STORAGE_ID}_response`,
+                    Buffer.from(JSON.stringify({ status: "recovery_complete" }))
+                );
+            } catch (error) {
+                console.log(`Ошибка при пересылке данных: ${error.message}`);
+            }
+
+            return;
+        }
+
+        if (query.clearReplica && query.date) {
+            const formattedDate = formatDate(query.date);
+            if (storageData[formattedDate]) {
+                delete storageData[formattedDate];
+                console.log(`Удалены записи для даты ${formattedDate} в storage_${STORAGE_ID}`);
+            }
+            return;
+        }
+
+        if (query.date) {
+            const formattedDate = formatDate(query.date);
+            const data = storageData[formattedDate] || [];
+
+            const response = data.length > 0
+                ? { date: formattedDate, data }
+                : { error: `Данные за ${formattedDate} не найдены` };
+
+            await channel.sendToQueue(responseQueue, Buffer.from(JSON.stringify(response)));
+        }
+
     }, { noAck: true });
 }
 

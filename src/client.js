@@ -7,12 +7,10 @@ async function startClient() {
     const channel = await connection.createChannel();
 
     await channel.assertQueue('client', { durable: false });
-
-    console.log("Клиент запущен. Введите команду: LOAD [путь_к_файлу] или GET [дата]");
+    console.log("Клиент запущен. Введите команду: LOAD [путь_к_файлу], GET [дата] или SHUTDOWN [номер хранителя]");
 
     function determineFileFormat(filePath) {
         console.log("Проверяем файл:", filePath); 
-
         const filename = path.basename(filePath);
 
         if (filename.includes("seattle-weather")) {
@@ -69,7 +67,7 @@ async function startClient() {
         const args = input.trim().split(" ");
 
         if (args.length < 2) {
-            console.log("Ошибка: Неверный формат команды. Используйте LOAD [файл] или GET [дата]");
+            console.log("Ошибка: Неверный формат команды. Используйте LOAD [файл], GET [дата] или SHUTDOWN [номер хранителя]");
             return;
         }
 
@@ -96,8 +94,16 @@ async function startClient() {
                 date: args[1] 
             })));
             console.log(`Запрос отправлен: ${args[1]}`);
+        } else if (args[0] === "SHUTDOWN") {
+            const storageId = parseInt(args[1], 10);
+            if (isNaN(storageId)) {
+                console.log("Ошибка: Укажите номер хранителя (например, SHUTDOWN 0)");
+                return;
+            }
+            console.log(`Отправка команды SHUTDOWN для хранителя ${storageId}`);
+            await channel.sendToQueue("manager", Buffer.from(JSON.stringify({ command: "SHUTDOWN", storageId })));
         } else {
-            console.log("Ошибка: Неизвестная команда. Используйте LOAD [файл] или GET [дата]");
+            console.log("Ошибка: Неизвестная команда. Используйте LOAD [файл], GET [дата] или SHUTDOWN [номер хранителя]");
         }
     });
 }
